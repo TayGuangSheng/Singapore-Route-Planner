@@ -1,0 +1,15 @@
+{
+  "name": "Singapore Route Planner",
+  "short_name": "SG Route",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f7f4ef",
+  "theme_color": "#0f1b24",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
