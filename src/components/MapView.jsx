@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { GoogleMap, Marker, DirectionsRenderer, Polyline } from '@react-google-maps/api';
+import UiIcon from './UiIcon.jsx';
 
 const mapContainerStyle = {
   width: '100%',
@@ -55,7 +56,10 @@ const MapView = ({ isLoaded, loadError, startLocation, routeStops, endLocation, 
 
   return (
     <div className="map-card">
-      <div className="map-title">{t("mapTitle")}</div>
+      <div className="map-title title-with-icon">
+        <UiIcon name="map" />
+        <span>{t("mapTitle")}</span>
+      </div>
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={center}

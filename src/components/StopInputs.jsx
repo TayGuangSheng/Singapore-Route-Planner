@@ -1,8 +1,15 @@
-const StopInputs = ({ stops, onStopChange, onAddStop, onRemoveStop, maxStops, t }) => {
+import UiIcon from "./UiIcon.jsx";
+
+const StopInputs = ({ className = "", stops, onStopChange, onAddStop, onRemoveStop, maxStops, t }) => {
+  const cardClassName = `card ${className}`.trim();
+
   return (
-    <div className="card" aria-label={t("stopsTitle")}>
+    <div className={cardClassName} aria-label={t("stopsTitle")}>
       <div className="card-title-row">
-        <h2>{t("stopsTitle")}</h2>
+        <h2 className="title-with-icon">
+          <UiIcon name="stops" />
+          <span>{t("stopsTitle")}</span>
+        </h2>
         <span className="badge">
           {t("stopCount")}: {stops.length} / {maxStops}
         </span>
@@ -40,7 +47,10 @@ const StopInputs = ({ stops, onStopChange, onAddStop, onRemoveStop, maxStops, t 
         onClick={onAddStop}
         disabled={stops.length >= maxStops}
       >
-        {t("addStop")}
+        <span className="button-with-icon">
+          <UiIcon name="plus" />
+          <span>{t("addStop")}</span>
+        </span>
       </button>
     </div>
   );

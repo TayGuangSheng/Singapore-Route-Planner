@@ -48,6 +48,27 @@ const buildAddressFromComponents = (components) => {
 
 const getPostalFromComponents = (components) => getComponent(components, "postal_code");
 
+const normalizePostalForComparison = (value) => value?.replace(/\s+/g, "").trim() || "";
+
+const resultHasExactPostal = (result, postalCode) => {
+  if (!result || !postalCode) {
+    return false;
+  }
+
+  const normalizedPostal = normalizePostalForComparison(postalCode);
+  const componentPostal = normalizePostalForComparison(
+    getPostalFromComponents(result.address_components || [])
+  );
+
+  if (componentPostal && componentPostal === normalizedPostal) {
+    return true;
+  }
+
+  const formattedAddress = result.formatted_address || "";
+  const postalPattern = new RegExp(`(^|\\D)${normalizedPostal}(\\D|$)`);
+  return postalPattern.test(formattedAddress);
+};
+
 const isGenericAddress = (address, postalCode) => {
   if (!address) {
     return true;
@@ -185,6 +206,7 @@ const fetchGeocodeByPostal = async (postalCode) => {
 export const geocodePostal = async (postalCode) => {
   assertMapsLoaded();
   const trimmed = postalCode.trim();
+  const normalizedPostalInput = normalizePostalForComparison(trimmed);
 
   const geocoder = new window.google.maps.Geocoder();
   const initialResults = await new Promise((resolve) => {
@@ -228,11 +250,10 @@ export const geocodePostal = async (postalCode) => {
   let address = best.address;
   const bestLocation = best.location || latLng;
   const looksGeneric = isGenericAddress(address, trimmed);
-  const candidatePostals = candidates
-    .map((result) => getPostalFromComponents(result.address_components))
-    .filter(Boolean);
-  const hasPostalCandidates = candidatePostals.length > 0;
-  const postalMismatch = isPostalOnly && hasPostalCandidates && !candidatePostals.includes(trimmed);
+  const hasExactPostalMatch = isPostalOnly
+    ? candidates.some((result) => resultHasExactPostal(result, normalizedPostalInput))
+    : true;
+  const postalMismatch = isPostalOnly && !hasExactPostalMatch;
   if (isPostalOnly && looksGeneric && !address) {
     address = `Singapore ${trimmed}`;
   }

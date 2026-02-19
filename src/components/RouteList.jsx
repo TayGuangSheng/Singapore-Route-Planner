@@ -1,3 +1,5 @@
+import UiIcon from "./UiIcon.jsx";
+
 const RouteList = ({
   routeStops,
   endStop,
@@ -14,7 +16,10 @@ const RouteList = ({
   return (
     <div className="card">
       <div className="card-title-row">
-        <h2>{t("routeOrder")}</h2>
+        <h2 className="title-with-icon">
+          <UiIcon name="route" />
+          <span>{t("routeOrder")}</span>
+        </h2>
         <div className="stat-chips">
           <span className="badge">
             {t("deliveredCount")}: {deliveredCount}
@@ -49,7 +54,10 @@ const RouteList = ({
                     className="primary-button"
                     onClick={() => onNavigate(stop)}
                   >
-                    {t("navigate")}
+                    <span className="button-with-icon">
+                      <UiIcon name="drive" />
+                      <span>{t("navigate")}</span>
+                    </span>
                   </button>
                   <label className="checkbox">
                     <input
@@ -76,7 +84,10 @@ const RouteList = ({
                   className="primary-button"
                   onClick={() => onNavigate(endStop)}
                 >
-                  {t("navigate")}
+                  <span className="button-with-icon">
+                    <UiIcon name="drive" />
+                    <span>{t("navigate")}</span>
+                  </span>
                 </button>
               </div>
             </div>
