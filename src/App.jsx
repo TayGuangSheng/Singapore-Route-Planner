@@ -31,6 +31,7 @@ const normalizeLocationInput = (value) => {
   return trimmed;
 };
 const normalizeSavedLocationName = (value) => value.replace(/\s+/g, ' ').trim();
+const getFilledStops = (items) => items.filter((stop) => stop.postal.trim());
 
 const getInitialSavedLocations = () => {
   try {
@@ -220,6 +221,7 @@ const App = () => {
 
   const validateInputs = () => {
     const validationErrors = [];
+    const filledStops = getFilledStops(stops);
 
     if (!startPostal.trim()) {
       validationErrors.push(t('missingStart'));
@@ -227,14 +229,12 @@ const App = () => {
       validationErrors.push(t('invalidPostal'));
     }
 
-    if (stops.length < 2) {
+    if (!filledStops.length && !endPostal.trim()) {
       validationErrors.push(t('missingStops'));
     }
 
     stops.forEach((stop, index) => {
-      if (!stop.postal.trim()) {
-        validationErrors.push(`${t('missingStop')} ${index + 1}`);
-      } else if (isNumericOnly(stop.postal) && !isValidPostal(stop.postal)) {
+      if (stop.postal.trim() && isNumericOnly(stop.postal) && !isValidPostal(stop.postal)) {
         validationErrors.push(`${t('invalidStop')} ${index + 1}`);
       }
     });
@@ -301,6 +301,7 @@ const App = () => {
     setIsOptimizing(true);
 
     try {
+      const filledStops = getFilledStops(stops);
       const startLocation = await geocodePostal(startPostal);
       if (!startLocation) {
         setErrors([`${t('geocodeFail')}: ${startPostal}`]);
@@ -314,11 +315,11 @@ const App = () => {
       }
 
       const stopLocations = await Promise.all(
-        stops.map((stop) => geocodePostal(stop.postal))
+        filledStops.map((stop) => geocodePostal(stop.postal))
       );
 
       const failedStops = stopLocations
-        .map((location, index) => (location ? null : stops[index].postal))
+        .map((location, index) => (location ? null : filledStops[index].postal))
         .filter(Boolean);
 
       if (failedStops.length) {
@@ -327,7 +328,7 @@ const App = () => {
         return;
       }
       const mismatchStops = stopLocations
-        .map((location, index) => (location?.postalMismatch ? stops[index].postal : null))
+        .map((location, index) => (location?.postalMismatch ? filledStops[index].postal : null))
         .filter(Boolean);
       if (mismatchStops.length) {
         setErrors(mismatchStops.map((postal) => `${t('postalMismatch')}: ${postal}`));
@@ -366,7 +367,7 @@ const App = () => {
       let order = buildNearestNeighborOrder(matrixForStops);
       order = applyTwoOpt(order, matrixForStops);
 
-      if (order.length !== stops.length) {
+      if (order.length !== filledStops.length) {
         setErrors([t('matrixFail')]);
         setIsOptimizing(false);
         return;
@@ -374,7 +375,7 @@ const App = () => {
 
       const orderedStops = order.map((matrixIndex) => {
         const stopIndex = matrixIndex - 1;
-        const stop = stops[stopIndex];
+        const stop = filledStops[stopIndex];
         return {
           ...stop,
           latLng: stopLatLngs[stopIndex],
@@ -478,8 +479,9 @@ const App = () => {
 
   const nextStopId = routeData?.stops.find((stop) => !stop.delivered)?.id || null;
   const deliveredCount = routeData?.stops.filter((stop) => stop.delivered).length || 0;
-  const readyStopCount = stops.filter((stop) => stop.postal.trim()).length;
-  const canOptimize = !isOptimizing && startPostal.trim() && readyStopCount >= 2;
+  const readyStopCount = getFilledStops(stops).length;
+  const hasRouteTarget = readyStopCount > 0 || Boolean(endPostal.trim());
+  const canOptimize = !isOptimizing && Boolean(startPostal.trim()) && hasRouteTarget;
   const endStop = routeData?.endLocation
     ? { postal: routeData.endPostal, latLng: routeData.endLocation, address: routeData.endAddress }
     : null;

@@ -9,7 +9,9 @@ const RouteList = ({
   deliveredCount,
   t
 }) => {
-  if (!routeStops?.length) {
+  const stopCount = routeStops?.length || 0;
+
+  if (!stopCount && !endStop) {
     return null;
   }
 
@@ -20,18 +22,20 @@ const RouteList = ({
           <UiIcon name="route" />
           <span>{t("routeOrder")}</span>
         </h2>
-        <div className="stat-chips">
-          <span className="badge">
-            {t("deliveredCount")}: {deliveredCount}
-          </span>
-          <span className="badge">
-            {t("remainingCount")}: {routeStops.length - deliveredCount}
-          </span>
-        </div>
+        {stopCount > 0 && (
+          <div className="stat-chips">
+            <span className="badge">
+              {t("deliveredCount")}: {deliveredCount}
+            </span>
+            <span className="badge">
+              {t("remainingCount")}: {stopCount - deliveredCount}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="route-list">
-        {routeStops.map((stop, index) => {
+        {routeStops?.map((stop, index) => {
           const isNext = stop.id === nextStopId;
           const itemClass = stop.delivered
             ? "route-item delivered"

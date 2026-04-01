@@ -38,6 +38,6 @@ Open the local URL shown in the terminal. The app is optimized for mobile browse
 ## Notes
 
 - Postal codes must be 6 digits (Singapore format), or you can enter full addresses.
-- The app limits to 20 stops and disables optimization until at least 2 stops are provided.
+- The app limits to 20 stops and enables optimization when you enter a start plus at least 1 stop or an end location.
 - Navigation buttons open Google Maps or Waze directly via deep links.
 - Drivers can save named common locations (for example `Home`, `Work`) and reuse them for Start/End; saved entries persist in browser storage.
