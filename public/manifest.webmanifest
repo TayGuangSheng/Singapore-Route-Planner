@@ -3,13 +3,14 @@
   "short_name": "SG Route",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f7f4ef",
-  "theme_color": "#0f1b24",
+  "background_color": "#eef3f1",
+  "theme_color": "#17202a",
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ]
 }

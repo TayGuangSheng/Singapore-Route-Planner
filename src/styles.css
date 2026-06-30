@@ -145,15 +145,15 @@ h3 {
   flex: 0 0 auto;
   width: 40px;
   height: 40px;
-  color: var(--ink);
-  background: var(--amber);
   border-radius: var(--radius);
+  overflow: hidden;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.36) inset;
 }
 
-.app-mark .ui-icon {
-  width: 22px;
-  height: 22px;
+.app-logo {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .app-title-block {

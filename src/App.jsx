@@ -529,7 +529,7 @@ const App = () => {
       <header className="app-header">
         <div className="app-brand">
           <span className="app-mark" aria-hidden="true">
-            <UiIcon name="route" />
+            <img src="/icon.svg" alt="" className="app-logo" />
           </span>
           <div className="app-title-block">
             <h1>{t('appTitle')}</h1>
