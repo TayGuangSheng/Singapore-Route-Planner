@@ -1,18 +1,30 @@
 import { useEffect, useRef } from 'react';
-import { GoogleMap, Marker, DirectionsRenderer, Polyline } from '@react-google-maps/api';
-import UiIcon from './UiIcon.jsx';
-
-const mapContainerStyle = {
-  width: '100%',
-  height: '360px'
-};
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 const defaultCenter = { lat: 1.3521, lng: 103.8198 };
+const oneMapTileUrl = 'https://www.onemap.gov.sg/maps/tiles/Default/{z}/{x}/{y}.png';
+const oneMapAttribution =
+  '<img src="https://www.onemap.gov.sg/web-assets/images/logo/om_logo.png" style="height:16px;width:16px;vertical-align:middle;" alt="OneMap" />&nbsp;<a href="https://www.onemap.gov.sg/" target="_blank" rel="noopener noreferrer">OneMap</a>&nbsp;&copy;&nbsp;contributors&nbsp;|&nbsp;<a href="https://www.sla.gov.sg/" target="_blank" rel="noopener noreferrer">Singapore Land Authority</a>';
 
-const MapView = ({ isLoaded, loadError, startLocation, routeStops, endLocation, directions, t }) => {
+const isValidPoint = (point) =>
+  point && Number.isFinite(Number(point.lat)) && Number.isFinite(Number(point.lng));
+
+const toLeafletPoint = (point) => [Number(point.lat), Number(point.lng)];
+
+const createMarkerIcon = (label, type = '') =>
+  L.divIcon({
+    className: `route-map-marker ${type}`.trim(),
+    html: `<span>${label}</span>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 28]
+  });
+
+const MapView = ({ startLocation, routeStops, endLocation, routePath, t }) => {
+  const containerRef = useRef(null);
   const mapRef = useRef(null);
+  const layerRef = useRef(null);
 
-  const center = startLocation || routeStops?.[0]?.latLng || defaultCenter;
   const fallbackPath = [];
   if (startLocation) {
     fallbackPath.push(startLocation);
@@ -24,116 +36,92 @@ const MapView = ({ isLoaded, loadError, startLocation, routeStops, endLocation, 
     fallbackPath.push(endLocation);
   }
 
-  const cleanedPath = fallbackPath.filter(
-    (point) => point && Number.isFinite(point.lat) && Number.isFinite(point.lng)
-  );
-  const fallbackKey = cleanedPath.map((point) => `${point.lat},${point.lng}`).join("|");
-
-  const fitMapToPoints = () => {
-    if (!isLoaded || !window.google?.maps || !mapRef.current || !cleanedPath.length) {
-      return;
-    }
-    if (cleanedPath.length === 1) {
-      mapRef.current.setCenter(cleanedPath[0]);
-      mapRef.current.setZoom(14);
-      return;
-    }
-    const bounds = new window.google.maps.LatLngBounds();
-    cleanedPath.forEach((point) => bounds.extend(point));
-    mapRef.current.fitBounds(bounds, { top: 48, right: 24, bottom: 48, left: 24 });
-  };
+  const cleanedFallbackPath = fallbackPath.filter(isValidPoint);
+  const cleanedRoutePath = routePath?.filter(isValidPoint) || [];
+  const displayPath = cleanedRoutePath.length > 1 ? cleanedRoutePath : cleanedFallbackPath;
+  const pathKey = displayPath.map((point) => `${point.lat},${point.lng}`).join('|');
+  const markerKey = cleanedFallbackPath.map((point) => `${point.lat},${point.lng}`).join('|');
 
   useEffect(() => {
-    fitMapToPoints();
-  }, [fallbackKey, isLoaded]);
+    if (!containerRef.current || mapRef.current) {
+      return undefined;
+    }
 
-  if (loadError) {
-    return <div className="map-fallback">{t("mapsNotReady")}</div>;
-  }
-  if (!isLoaded) {
-    return <div className="map-fallback">{t("mapsNotReady")}</div>;
-  }
+    const map = L.map(containerRef.current, {
+      center: toLeafletPoint(startLocation || defaultCenter),
+      zoom: 12,
+      zoomControl: false
+    });
+
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    L.tileLayer(oneMapTileUrl, {
+      minZoom: 11,
+      maxZoom: 19,
+      attribution: oneMapAttribution
+    }).addTo(map);
+
+    layerRef.current = L.layerGroup().addTo(map);
+    mapRef.current = map;
+    window.setTimeout(() => map.invalidateSize(), 0);
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+      layerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!mapRef.current || !layerRef.current) {
+      return;
+    }
+
+    layerRef.current.clearLayers();
+
+    if (displayPath.length > 1) {
+      L.polyline(displayPath.map(toLeafletPoint), {
+        color: '#1f6fae',
+        weight: 5,
+        opacity: 0.9
+      }).addTo(layerRef.current);
+    }
+
+    if (isValidPoint(startLocation)) {
+      L.marker(toLeafletPoint(startLocation), {
+        icon: createMarkerIcon(t('startLabel'), 'start')
+      }).addTo(layerRef.current);
+    }
+
+    routeStops?.forEach((stop, index) => {
+      if (!isValidPoint(stop.latLng)) {
+        return;
+      }
+      L.marker(toLeafletPoint(stop.latLng), {
+        icon: createMarkerIcon(String(index + 1), stop.delivered ? 'delivered' : '')
+      }).addTo(layerRef.current);
+    });
+
+    if (isValidPoint(endLocation)) {
+      L.marker(toLeafletPoint(endLocation), {
+        icon: createMarkerIcon(t('endLabel'), 'end')
+      }).addTo(layerRef.current);
+    }
+
+    if (displayPath.length > 1) {
+      mapRef.current.fitBounds(L.latLngBounds(displayPath.map(toLeafletPoint)), {
+        padding: [24, 24]
+      });
+    } else if (displayPath.length === 1) {
+      mapRef.current.setView(toLeafletPoint(displayPath[0]), 15);
+    }
+
+    window.setTimeout(() => mapRef.current?.invalidateSize(), 0);
+  }, [pathKey, markerKey, startLocation, routeStops, endLocation, t]);
 
   return (
-    <div className="map-card">
-      <div className="map-title title-with-icon">
-        <UiIcon name="map" />
-        <span>{t("mapTitle")}</span>
-      </div>
-      <GoogleMap
-        mapContainerStyle={mapContainerStyle}
-        center={center}
-        zoom={12}
-        options={{
-          fullscreenControl: false,
-          streetViewControl: false,
-          mapTypeControl: false
-        }}
-        onLoad={(map) => {
-          mapRef.current = map;
-          fitMapToPoints();
-        }}
-      >
-        {directions && (
-          <DirectionsRenderer
-            directions={directions}
-            options={{
-              preserveViewport: true,
-              suppressMarkers: true,
-              polylineOptions: {
-                strokeColor: '#1f7a8c',
-                strokeWeight: 6,
-                strokeOpacity: 0.9
-              }
-            }}
-          />
-        )}
-        {!directions && cleanedPath.length > 1 && (
-          <Polyline
-            path={cleanedPath}
-            options={{
-              strokeColor: '#1f7a8c',
-              strokeWeight: 5,
-              strokeOpacity: 0.6
-            }}
-          />
-        )}
-        {startLocation && (
-          <Marker
-            position={startLocation}
-            label={{
-              text: t("startLabel"),
-              fontWeight: '700',
-              fontSize: '14px',
-              color: '#0f1b24'
-            }}
-          />
-        )}
-        {routeStops?.map((stop, index) => (
-          <Marker
-            key={stop.id}
-            position={stop.latLng}
-            label={{
-              text: String(index + 1),
-              fontWeight: '700',
-              fontSize: '14px',
-              color: '#0f1b24'
-            }}
-          />
-        ))}
-        {endLocation && (
-          <Marker
-            position={endLocation}
-            label={{
-              text: t("endLabel"),
-              fontWeight: '700',
-              fontSize: '14px',
-              color: '#0f1b24'
-            }}
-          />
-        )}
-      </GoogleMap>
-    </div>
+    <section className="map-card">
+      <div className="leaflet-map" ref={containerRef} aria-label={t('mapTitle')} />
+    </section>
   );
 };
 

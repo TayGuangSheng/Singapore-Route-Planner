@@ -10,31 +10,24 @@ const RouteList = ({
   t
 }) => {
   const stopCount = routeStops?.length || 0;
+  const getDisplayAddress = (stop) => stop.address || stop.postal;
 
   if (!stopCount && !endStop) {
     return null;
   }
 
   return (
-    <div className="card">
-      <div className="card-title-row">
-        <h2 className="title-with-icon">
-          <UiIcon name="route" />
-          <span>{t("routeOrder")}</span>
-        </h2>
+    <section className="route-panel">
+      <div className="route-panel-header">
+        <h2>{t("routeOrder")}</h2>
         {stopCount > 0 && (
-          <div className="stat-chips">
-            <span className="badge">
-              {t("deliveredCount")}: {deliveredCount}
-            </span>
-            <span className="badge">
-              {t("remainingCount")}: {stopCount - deliveredCount}
-            </span>
-          </div>
+          <span className="route-count">
+            {deliveredCount}/{stopCount} {t("deliveredCount")}
+          </span>
         )}
       </div>
 
-      <div className="route-list">
+      <ol className="route-list">
         {routeStops?.map((stop, index) => {
           const isNext = stop.id === nextStopId;
           const itemClass = stop.delivered
@@ -44,61 +37,83 @@ const RouteList = ({
             : "route-item";
 
           return (
-            <div key={stop.id} className={itemClass}>
-              <div className="route-index">{index + 1}</div>
+            <li key={stop.id} className={itemClass}>
+              <span className="route-index">{index + 1}.</span>
               <div className="route-info">
                 <div className="route-postal">
-                  {stop.postal}
-                  {isNext && <span className="next-pill">{t("nextStop")}</span>}
+                  <span className="route-address-inline">{getDisplayAddress(stop)}</span>
                 </div>
-                {stop.address && <div className="route-address">{stop.address}</div>}
+                {isNext && <span className="next-pill">{t("nextStop")}</span>}
                 <div className="route-actions">
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => onNavigate(stop)}
-                  >
-                    <span className="button-with-icon">
-                      <UiIcon name="drive" />
-                      <span>{t("navigate")}</span>
-                    </span>
-                  </button>
-                  <label className="checkbox">
-                    <input
-                      type="checkbox"
-                      checked={stop.delivered}
-                      onChange={() => onToggleDelivered(stop.id)}
-                    />
-                    <span>{t("delivered")}</span>
-                  </label>
+                  <div className="nav-group" aria-label={t("navigationApp")}>
+                    <button
+                      type="button"
+                      className="nav-action"
+                      onClick={() => onNavigate(stop, "google")}
+                    >
+                      <img src="/googlemaps-logo.svg" alt="" className="nav-logo" />
+                      <span>{t("googleMaps")}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="nav-action"
+                      onClick={() => onNavigate(stop, "waze")}
+                    >
+                      <img src="/waze-logo.svg" alt="" className="nav-logo" />
+                      <span>{t("waze")}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+              <button
+                type="button"
+                className={stop.delivered ? "delivered-toggle active" : "delivered-toggle"}
+                onClick={() => onToggleDelivered(stop.id)}
+                aria-pressed={stop.delivered}
+                aria-label={stop.delivered ? t("undoDelivered") : t("markDelivered")}
+              >
+                <span className="delivered-toggle-mark" aria-hidden="true">
+                  {stop.delivered && <UiIcon name="check" />}
+                </span>
+                <span className="delivered-toggle-label">
+                  {stop.delivered ? t("delivered") : t("markShort")}
+                </span>
+              </button>
+            </li>
           );
         })}
         {endStop && (
-          <div className="route-item end">
-            <div className="route-index end-index">{t("endLabel")}</div>
+          <li className="route-item end">
+            <span className="route-index end-index">{t("endLabel")}.</span>
             <div className="route-info">
-              <div className="route-postal">{endStop.postal}</div>
-              {endStop.address && <div className="route-address">{endStop.address}</div>}
+              <div className="route-postal">
+                <span className="route-address-inline">{getDisplayAddress(endStop)}</span>
+              </div>
               <div className="route-actions">
-                <button
-                  type="button"
-                  className="primary-button"
-                  onClick={() => onNavigate(endStop)}
-                >
-                  <span className="button-with-icon">
-                    <UiIcon name="drive" />
-                    <span>{t("navigate")}</span>
-                  </span>
-                </button>
+                <div className="nav-group" aria-label={t("navigationApp")}>
+                  <button
+                    type="button"
+                    className="nav-action"
+                    onClick={() => onNavigate(endStop, "google")}
+                  >
+                    <img src="/googlemaps-logo.svg" alt="" className="nav-logo" />
+                    <span>{t("googleMaps")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="nav-action"
+                    onClick={() => onNavigate(endStop, "waze")}
+                  >
+                    <img src="/waze-logo.svg" alt="" className="nav-logo" />
+                    <span>{t("waze")}</span>
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          </li>
         )}
-      </div>
-    </div>
+      </ol>
+    </section>
   );
 };
 

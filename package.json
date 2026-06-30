@@ -6,10 +6,13 @@
   "scripts": {
     "dev": "vite",
     "build": "node ./node_modules/vite/bin/vite.js build",
+    "test": "node --test tests/oneMap.test.mjs tests/routeOptimization.test.mjs",
+    "check": "npm run test && npm run build",
+    "onemap:token": "node ./scripts/refresh-onemap-token.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@react-google-maps/api": "^2.20.1",
+    "leaflet": "^1.9.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

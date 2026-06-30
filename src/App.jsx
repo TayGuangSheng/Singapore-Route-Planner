@@ -1,18 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useJsApiLoader } from '@react-google-maps/api';
 import LanguageToggle from './components/LanguageToggle.jsx';
 import StopInputs from './components/StopInputs.jsx';
+import AddressAutocomplete from './components/AddressAutocomplete.jsx';
 import MapView from './components/MapView.jsx';
 import RouteList from './components/RouteList.jsx';
 import SavedLocations from './components/SavedLocations.jsx';
 import UiIcon from './components/UiIcon.jsx';
 import { translations, getInitialLanguage, LANGUAGE_STORAGE_KEY } from './i18n.js';
-import { geocodePostal, getDistanceMatrix, GOOGLE_MAPS_API_KEY } from './services/googleMaps.js';
+import { geocodeLocation, getDistanceMatrix, getRouteDetails } from './services/oneMap.js';
 import { applyTwoOpt, buildNearestNeighborOrder } from './utils/routeOptimization.js';
 import { formatDistance, formatDuration } from './utils/formatters.js';
 
 const MAX_STOPS = 20;
 const DEFAULT_STOP_MINUTES = 5;
+const DEFAULT_VEHICLE_SPEED_KMH = 30;
 const SAVED_LOCATIONS_STORAGE_KEY = 'route_planner_saved_locations';
 
 const createStopId = () => {
@@ -23,12 +24,12 @@ const createStopId = () => {
 };
 
 const normalizeLocationInput = (value) => {
-  const trimmed = value.replace(/\s+/g, ' ').trim();
-  const digitsOnly = trimmed.replace(/\s/g, '');
-  if (/^\d+$/.test(digitsOnly)) {
+  const collapsed = value.replace(/\s+/g, ' ');
+  const digitsOnly = collapsed.replace(/\s/g, '');
+  if (/^[\d\s]+$/.test(collapsed) && /^\d+$/.test(digitsOnly)) {
     return digitsOnly.slice(0, 6);
   }
-  return trimmed;
+  return collapsed.replace(/^\s+/, '');
 };
 const normalizeSavedLocationName = (value) => value.replace(/\s+/g, ' ').trim();
 const getFilledStops = (items) => items.filter((stop) => stop.postal.trim());
@@ -72,25 +73,33 @@ const normalizeStopMinutes = (value) => {
   }
   return Math.min(Math.max(parsed, 0), 240);
 };
+const normalizeVehicleSpeedKmh = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed)) {
+    return DEFAULT_VEHICLE_SPEED_KMH;
+  }
+  return Math.min(Math.max(parsed, 5), 120);
+};
 
 const App = () => {
   const [language, setLanguage] = useState(getInitialLanguage);
   const [startPostal, setStartPostal] = useState('');
+  const [startLatLng, setStartLatLng] = useState(null);
   const [endPostal, setEndPostal] = useState('');
   const [savedLocations, setSavedLocations] = useState(getInitialSavedLocations);
   const [savedLocationName, setSavedLocationName] = useState('');
   const [savedLocationValue, setSavedLocationValue] = useState('');
   const [defaultStopMinutes, setDefaultStopMinutes] = useState(DEFAULT_STOP_MINUTES);
-  const [stops, setStops] = useState([{ id: createStopId(), postal: '' }]);
+  const [vehicleSpeedKmh, setVehicleSpeedKmh] = useState(DEFAULT_VEHICLE_SPEED_KMH);
+  const [stops, setStops] = useState([
+    { id: createStopId(), postal: '' },
+    { id: createStopId(), postal: '' }
+  ]);
   const [routeData, setRouteData] = useState(null);
   const [errors, setErrors] = useState([]);
   const [isOptimizing, setIsOptimizing] = useState(false);
-  const [navApp, setNavApp] = useState('google');
-
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: []
-  });
+  const [isLocating, setIsLocating] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const t = useMemo(() => {
     const dictionary = translations[language] || translations.en;
@@ -105,8 +114,22 @@ const App = () => {
     localStorage.setItem(SAVED_LOCATIONS_STORAGE_KEY, JSON.stringify(savedLocations));
   }, [savedLocations]);
 
+  const resolveSavedLocationValue = (value) => {
+    const normalizedValue = normalizeSavedLocationName(value).toLowerCase();
+    if (!normalizedValue) {
+      return value;
+    }
+
+    const savedLocation = savedLocations.find(
+      (location) => location.name.toLowerCase() === normalizedValue
+    );
+    return savedLocation?.value || value;
+  };
+
   const handleStartChange = (value) => {
     setStartPostal(normalizeLocationInput(value));
+    setStartLatLng(null);
+    setIsLocating(false);
     setRouteData(null);
   };
 
@@ -125,6 +148,12 @@ const App = () => {
   const handleDefaultStopTimeChange = (value) => {
     const minutes = normalizeStopMinutes(value);
     setDefaultStopMinutes(minutes);
+    setRouteData(null);
+  };
+
+  const handleVehicleSpeedChange = (value) => {
+    const speedKmh = normalizeVehicleSpeedKmh(value);
+    setVehicleSpeedKmh(speedKmh);
     setRouteData(null);
   };
 
@@ -180,6 +209,8 @@ const App = () => {
 
     if (target === 'start') {
       setStartPostal(savedLocation.value);
+      setStartLatLng(null);
+      setIsLocating(false);
     } else {
       setEndPostal(savedLocation.value);
     }
@@ -188,6 +219,35 @@ const App = () => {
 
   const handleUseSavedForStart = (id) => {
     applySavedLocation(id, 'start');
+  };
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator?.geolocation) {
+      setStartLatLng(null);
+      setIsLocating(false);
+      setErrors([t('geoNotSupported')]);
+      return;
+    }
+    setErrors([]);
+    setStartLatLng(null);
+    setIsLocating(true);
+    setStartPostal(t('locating'));
+    setRouteData(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setStartLatLng({ lat, lng });
+        setStartPostal(t('currentLocationLabel'));
+        setIsLocating(false);
+      },
+      (err) => {
+        setStartLatLng(null);
+        setStartPostal('');
+        setIsLocating(false);
+        setErrors([err?.message || t('geoNotSupported')]);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   };
 
   const handleUseSavedForEnd = (id) => {
@@ -222,10 +282,12 @@ const App = () => {
   const validateInputs = () => {
     const validationErrors = [];
     const filledStops = getFilledStops(stops);
+    const resolvedStartPostal = resolveSavedLocationValue(startPostal);
+    const resolvedEndPostal = resolveSavedLocationValue(endPostal);
 
     if (!startPostal.trim()) {
       validationErrors.push(t('missingStart'));
-    } else if (isNumericOnly(startPostal) && !isValidPostal(startPostal)) {
+    } else if (isNumericOnly(resolvedStartPostal) && !isValidPostal(resolvedStartPostal)) {
       validationErrors.push(t('invalidPostal'));
     }
 
@@ -234,61 +296,27 @@ const App = () => {
     }
 
     stops.forEach((stop, index) => {
-      if (stop.postal.trim() && isNumericOnly(stop.postal) && !isValidPostal(stop.postal)) {
+      const resolvedStopPostal = resolveSavedLocationValue(stop.postal);
+      if (
+        stop.postal.trim() &&
+        isNumericOnly(resolvedStopPostal) &&
+        !isValidPostal(resolvedStopPostal)
+      ) {
         validationErrors.push(`${t('invalidStop')} ${index + 1}`);
       }
     });
 
-    if (endPostal.trim() && isNumericOnly(endPostal) && !isValidPostal(endPostal)) {
+    if (endPostal.trim() && isNumericOnly(resolvedEndPostal) && !isValidPostal(resolvedEndPostal)) {
       validationErrors.push(t('invalidEnd'));
     }
 
     return validationErrors;
   };
 
-  const getDirections = (origin, orderedStops, endLocation) => {
-    if (!window.google?.maps) {
-      return Promise.reject(new Error('Google Maps not loaded'));
-    }
-
-    const destination = endLocation || orderedStops[orderedStops.length - 1].latLng;
-    const waypointStops = endLocation ? orderedStops : orderedStops.slice(0, -1);
-    const waypoints = waypointStops.map((stop) => ({
-      location: stop.latLng,
-      stopover: true
-    }));
-
-    const service = new window.google.maps.DirectionsService();
-
-    return new Promise((resolve, reject) => {
-      service.route(
-        {
-          origin,
-          destination,
-          waypoints,
-          travelMode: window.google.maps.TravelMode.DRIVING,
-          optimizeWaypoints: false,
-          region: 'SG'
-        },
-        (result, status) => {
-          if (status === 'OK') {
-            resolve(result);
-          } else {
-            reject(new Error(status));
-          }
-        }
-      );
-    });
-  };
-
   const handleOptimize = async () => {
     setErrors([]);
-    if (!GOOGLE_MAPS_API_KEY) {
-      setErrors([t('apiKeyMissing')]);
-      return;
-    }
-    if (!isLoaded) {
-      setErrors([t('mapsNotReady')]);
+    if (isLocating) {
+      setErrors([t('locating')]);
       return;
     }
 
@@ -301,22 +329,34 @@ const App = () => {
     setIsOptimizing(true);
 
     try {
-      const filledStops = getFilledStops(stops);
-      const startLocation = await geocodePostal(startPostal);
-      if (!startLocation) {
-        setErrors([`${t('geocodeFail')}: ${startPostal}`]);
-        setIsOptimizing(false);
-        return;
-      }
-      if (startLocation.postalMismatch) {
-        setErrors([`${t('postalMismatch')}: ${startPostal}`]);
-        setIsOptimizing(false);
-        return;
+      const warningMessages = [];
+      const filledStops = getFilledStops(stops).map((stop) => ({
+        ...stop,
+        resolvedPostal: resolveSavedLocationValue(stop.postal)
+      }));
+      const resolvedStartPostal = resolveSavedLocationValue(startPostal);
+      const resolvedEndPostal = resolveSavedLocationValue(endPostal);
+      let startLocation = null;
+      if (startLatLng) {
+        startLocation = startLatLng;
+      } else {
+        startLocation = await geocodeLocation(resolvedStartPostal);
+        if (!startLocation) {
+          setErrors([`${t('geocodeFail')}: ${startPostal}`]);
+          setIsOptimizing(false);
+          return;
+        }
+        if (startLocation.postalMismatch) {
+          setErrors([`${t('postalMismatch')}: ${startPostal}`]);
+          setIsOptimizing(false);
+          return;
+        }
       }
 
-      const stopLocations = await Promise.all(
-        filledStops.map((stop) => geocodePostal(stop.postal))
-      );
+      const stopLocations = [];
+      for (const stop of filledStops) {
+        stopLocations.push(await geocodeLocation(stop.resolvedPostal));
+      }
 
       const failedStops = stopLocations
         .map((location, index) => (location ? null : filledStops[index].postal))
@@ -336,7 +376,7 @@ const App = () => {
         return;
       }
 
-      const endLocation = endPostal ? await geocodePostal(endPostal) : null;
+      const endLocation = endPostal ? await geocodeLocation(resolvedEndPostal) : null;
       if (endPostal && !endLocation) {
         setErrors([`${t('geocodeFail')}: ${endPostal}`]);
         setIsOptimizing(false);
@@ -352,20 +392,19 @@ const App = () => {
         lat: location.lat,
         lng: location.lng
       }));
-      const startLatLng = { lat: startLocation.lat, lng: startLocation.lng };
+      const routeStartLatLng = { lat: startLocation.lat, lng: startLocation.lng };
       const endLatLng = endLocation ? { lat: endLocation.lat, lng: endLocation.lng } : null;
 
       const locations = endLatLng
-        ? [startLatLng, ...stopLatLngs, endLatLng]
-        : [startLatLng, ...stopLatLngs];
-      const { distanceMatrix, durationMatrix } = await getDistanceMatrix(locations);
+        ? [routeStartLatLng, ...stopLatLngs, endLatLng]
+        : [routeStartLatLng, ...stopLatLngs];
+      const speedOptions = { averageSpeedKmh: vehicleSpeedKmh };
+      const { distanceMatrix, durationMatrix } = await getDistanceMatrix(locations, speedOptions);
 
-      const matrixForStops = endLocation
-        ? distanceMatrix.slice(0, -1).map((row) => row.slice(0, -1))
-        : distanceMatrix;
-
-      let order = buildNearestNeighborOrder(matrixForStops);
-      order = applyTwoOpt(order, matrixForStops);
+      const endIndex = endLocation ? distanceMatrix.length - 1 : null;
+      const optimizationOptions = { endIndex };
+      let order = buildNearestNeighborOrder(distanceMatrix, optimizationOptions);
+      order = applyTwoOpt(order, distanceMatrix, optimizationOptions);
 
       if (order.length !== filledStops.length) {
         setErrors([t('matrixFail')]);
@@ -405,37 +444,33 @@ const App = () => {
         return total;
       };
 
-      const endIndex = endLocation ? distanceMatrix.length - 1 : null;
-      const totalDistance = computeTotal(distanceMatrix, endIndex);
-      const baseDuration = computeTotal(durationMatrix, endIndex);
+      let totalDistance = computeTotal(distanceMatrix, endIndex);
+      let baseDuration = computeTotal(durationMatrix, endIndex);
       const stopSeconds = orderedStops.length * (defaultStopMinutes || 0) * 60;
-      const totalDuration = baseDuration === null ? null : baseDuration + stopSeconds;
 
-      if (totalDistance === null || totalDuration === null) {
+      if (totalDistance === null || baseDuration === null) {
         setErrors([t('matrixFail')]);
         setIsOptimizing(false);
         return;
       }
 
-      let directions = null;
-      const warningMessages = [];
-      if (isLoaded) {
-        try {
-          directions = await getDirections(startLocation, orderedStops, endLocation);
-        } catch (error) {
-          warningMessages.push(t('directionsFail'));
-        }
-      } else {
-        warningMessages.push(t('directionsFail'));
+      const routeDetails = await getRouteDetails(routeStartLatLng, orderedStops, endLatLng, speedOptions);
+      if (routeDetails.totalDistance !== null && routeDetails.totalDuration !== null) {
+        totalDistance = routeDetails.totalDistance;
+        baseDuration = routeDetails.totalDuration;
       }
+      if (routeDetails.isApproximate && !warningMessages.includes(t('routeApproximation'))) {
+        warningMessages.push(t('routeApproximation'));
+      }
+      const totalDuration = baseDuration + stopSeconds;
 
       setRouteData({
         startPostal,
-        startLocation: startLatLng,
+        startLocation: routeStartLatLng,
         stops: orderedStops,
         totalDistance,
         totalDuration,
-        directions,
+        routePath: routeDetails.path,
         endPostal: endPostal || '',
         endLocation: endLatLng,
         endAddress: endLocation?.address || ''
@@ -465,13 +500,13 @@ const App = () => {
     });
   };
 
-  const handleNavigate = (stop) => {
+  const handleNavigate = (stop, preferredApp = 'google') => {
     if (!stop.latLng) {
       return;
     }
     const { lat, lng } = stop.latLng;
     const url =
-      navApp === 'waze'
+      preferredApp === 'waze'
         ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes`
         : `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`;
     window.location.href = url;
@@ -481,173 +516,212 @@ const App = () => {
   const deliveredCount = routeData?.stops.filter((stop) => stop.delivered).length || 0;
   const readyStopCount = getFilledStops(stops).length;
   const hasRouteTarget = readyStopCount > 0 || Boolean(endPostal.trim());
-  const canOptimize = !isOptimizing && Boolean(startPostal.trim()) && hasRouteTarget;
+  const canOptimize = !isOptimizing && !isLocating && Boolean(startPostal.trim()) && hasRouteTarget;
   const endStop = routeData?.endLocation
     ? { postal: routeData.endPostal, latLng: routeData.endLocation, address: routeData.endAddress }
     : null;
+  const shellClassName = routeData ? 'app-shell has-route' : 'app-shell';
+  const totalDistanceLabel = routeData ? formatDistance(routeData.totalDistance, t) : '--';
+  const totalDurationLabel = routeData ? formatDuration(routeData.totalDuration, t) : '--';
 
   return (
-    <div className="app-shell">
+    <div className={shellClassName}>
       <header className="app-header">
-        <div className="title-block">
-          <h1>{t('appTitle')}</h1>
-          {t('appTagline') && <p>{t('appTagline')}</p>}
+        <div className="app-brand">
+          <span className="app-mark" aria-hidden="true">
+            <UiIcon name="route" />
+          </span>
+          <div className="app-title-block">
+            <h1>{t('appTitle')}</h1>
+            <p>{t('appTagline')}</p>
+          </div>
         </div>
-        <div className="header-language">
-          <p className="eyebrow">{t('language')}</p>
-          <LanguageToggle language={language} onChange={setLanguage} />
+        <div className="header-actions">
+          <div className="header-language">
+            <UiIcon name="globe" />
+            <LanguageToggle language={language} onChange={setLanguage} label={t('language')} />
+          </div>
+          <button
+            type="button"
+            className={isSettingsOpen ? 'header-icon-button active' : 'header-icon-button'}
+            aria-label={t('settings')}
+            aria-expanded={isSettingsOpen}
+            title={t('settings')}
+            onClick={() => setIsSettingsOpen((current) => !current)}
+          >
+            <UiIcon name="settings" />
+          </button>
         </div>
       </header>
 
-      <main className="app-main">
-        <SavedLocations
-          className="section-card section-saved"
-          savedLocations={savedLocations}
-          savedLocationName={savedLocationName}
-          savedLocationValue={savedLocationValue}
-          onSavedLocationNameChange={handleSavedLocationNameChange}
-          onSavedLocationValueChange={handleSavedLocationValueChange}
-          onAddSavedLocation={handleAddSavedLocation}
-          onUseForStart={handleUseSavedForStart}
-          onUseForEnd={handleUseSavedForEnd}
-          onRemoveSavedLocation={handleRemoveSavedLocation}
-          t={t}
-        />
+      {isSettingsOpen && (
+        <section className="settings-panel" aria-label={t('settings')}>
+          <div className="settings-panel-header">
+            <h2>{t('settings')}</h2>
+            <button
+              type="button"
+              className="settings-close-button"
+              aria-label={t('closeSettings')}
+              title={t('closeSettings')}
+              onClick={() => setIsSettingsOpen(false)}
+            >
+              <UiIcon name="close" />
+            </button>
+          </div>
 
-        <section className="card section-card section-start">
-          <h2 className="title-with-icon">
-            <UiIcon name="start" />
-            <span>{t('startPostalLabel')}</span>
-          </h2>
-          <input
-            type="text"
-            inputMode="text"
+          <section className="settings-section" aria-label={t('routeOptions')}>
+            <h3>{t('routeOptions')}</h3>
+            <div className="options-grid">
+              <label className="field-group">
+                <span>{t('stopTimeLabel')}</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="0"
+                  max="240"
+                  step="1"
+                  value={defaultStopMinutes}
+                  onChange={(event) => handleDefaultStopTimeChange(event.target.value)}
+                />
+              </label>
+              <label className="field-group">
+                <span>{t('vehicleSpeedLabel')}</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min="5"
+                  max="120"
+                  step="1"
+                  value={vehicleSpeedKmh}
+                  onChange={(event) => handleVehicleSpeedChange(event.target.value)}
+                />
+              </label>
+            </div>
+          </section>
+
+          <SavedLocations
+            className="saved-panel settings-saved-panel"
+            savedLocations={savedLocations}
+            savedLocationName={savedLocationName}
+            savedLocationValue={savedLocationValue}
+            onSavedLocationNameChange={handleSavedLocationNameChange}
+            onSavedLocationValueChange={handleSavedLocationValueChange}
+            onAddSavedLocation={handleAddSavedLocation}
+            onUseForStart={handleUseSavedForStart}
+            onUseForEnd={handleUseSavedForEnd}
+            onRemoveSavedLocation={handleRemoveSavedLocation}
+            t={t}
+          />
+        </section>
+      )}
+
+      <main className="app-main">
+        <section className="planner-panel">
+          <AddressAutocomplete
+            inputClassName="start-location-input"
+            wrapperClassName="start-location-field"
             placeholder={t('startPostalPlaceholder')}
             value={startPostal}
-            onChange={(event) => handleStartChange(event.target.value)}
+            savedLocations={savedLocations}
+            onChange={handleStartChange}
+            showUseCurrent
+            onUseCurrent={handleUseCurrentLocation}
+            isUsingCurrent={isLocating}
+            ariaLabel={t('startPostalLabel')}
+            t={t}
           />
-        </section>
 
-        <StopInputs
-          className="section-card section-stops"
-          stops={stops}
-          onStopChange={handleStopChange}
-          onAddStop={handleAddStop}
-          onRemoveStop={handleRemoveStop}
-          maxStops={MAX_STOPS}
-          t={t}
-        />
+          {savedLocations.length > 0 && (
+            <div className="saved-tray" aria-label={t('savedLocationsTitle')}>
+              {savedLocations.slice(0, 6).map((loc) => (
+                <button
+                  key={loc.id}
+                  type="button"
+                  className="saved-chip"
+                  onClick={() => applySavedLocation(loc.id, 'start')}
+                >
+                  {loc.name}
+                </button>
+              ))}
+            </div>
+          )}
 
-        <section className="card section-card section-end">
-          <h2 className="title-with-icon">
-            <UiIcon name="end" />
-            <span>{t('endPostalLabel')}</span>
-          </h2>
-          <input
-            type="text"
-            inputMode="text"
+          <StopInputs
+            className="planner-stops"
+            stops={stops}
+            savedLocations={savedLocations}
+            onStopChange={handleStopChange}
+            onAddStop={handleAddStop}
+            onRemoveStop={handleRemoveStop}
+            maxStops={MAX_STOPS}
+            t={t}
+          />
+
+          <AddressAutocomplete
+            inputClassName="end-location-input"
+            wrapperClassName="end-location-field"
             placeholder={t('endPostalPlaceholder')}
             value={endPostal}
-            onChange={(event) => handleEndChange(event.target.value)}
+            savedLocations={savedLocations}
+            onChange={handleEndChange}
+            ariaLabel={t('endPostalLabel')}
+            t={t}
           />
-        </section>
-
-        <section className="card section-card section-time">
-          <h2 className="title-with-icon">
-            <UiIcon name="time" />
-            <span>{t('stopTimeLabel')}</span>
-          </h2>
-          <input
-            type="number"
-            inputMode="numeric"
-            min="0"
-            max="240"
-            step="1"
-            value={defaultStopMinutes}
-            onChange={(event) => handleDefaultStopTimeChange(event.target.value)}
-          />
-        </section>
-
-        <section className="card section-card section-nav">
-          <div className="card-title-row">
-            <h2 className="title-with-icon">
-              <UiIcon name="navigation" />
-              <span>{t('navigationApp')}</span>
-            </h2>
-          </div>
-          <div className="toggle-row">
-            <button
-              type="button"
-              className={navApp === 'google' ? 'chip active' : 'chip'}
-              onClick={() => setNavApp('google')}
-            >
-              <span className="chip-content">
-                <img src="/googlemaps-logo.svg" alt="" className="nav-logo" />
-                <span>{t('googleMaps')}</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={navApp === 'waze' ? 'chip active' : 'chip'}
-              onClick={() => setNavApp('waze')}
-            >
-              <span className="chip-content">
-                <img src="/waze-logo.svg" alt="" className="nav-logo" />
-                <span>{t('waze')}</span>
-              </span>
-            </button>
-          </div>
-        </section>
-
-        {errors.length > 0 && (
-          <section className="card error-card">
-            <h3>{t('errorsTitle')}</h3>
-            <ul>
-              {errors.map((error, index) => (
-                <li key={`${error}-${index}`}>{error}</li>
+          {savedLocations.length > 0 && (
+            <div className="saved-tray saved-tray-end" aria-label={t('savedLocationsTitle')}>
+              {savedLocations.slice(0, 6).map((loc) => (
+                <button
+                  key={loc.id}
+                  type="button"
+                  className="saved-chip"
+                  onClick={() => applySavedLocation(loc.id, 'end')}
+                >
+                  {loc.name}
+                </button>
               ))}
-            </ul>
-          </section>
-        )}
+            </div>
+          )}
 
-        <section className="card action-card">
+          {errors.length > 0 && (
+            <section className="error-card">
+              <h3>{t('errorsTitle')}</h3>
+              <ul>
+                {errors.map((error, index) => (
+                  <li key={`${error}-${index}`}>{error}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           <button
             type="button"
-            className="primary-button wide"
+            className="primary-button optimize-button"
             onClick={handleOptimize}
             disabled={!canOptimize}
+            aria-busy={isOptimizing}
           >
             <span className="button-with-icon">
               <UiIcon name={isOptimizing ? 'time' : 'optimize'} />
               <span>{isOptimizing ? t('optimizing') : t('optimize')}</span>
             </span>
           </button>
-          {!canOptimize && <p className="hint">{t('disableHint')}</p>}
+          {!canOptimize && <p className="inline-hint">{t('disableHint')}</p>}
         </section>
 
         {routeData && (
-          <section className="card summary-card">
-            <div>
-              <p className="eyebrow">{t('totalDistance')}</p>
-              <p className="summary-value">{formatDistance(routeData.totalDistance, t)}</p>
-            </div>
-            <div>
-              <p className="eyebrow">{t('totalTime')}</p>
-              <p className="summary-value">{formatDuration(routeData.totalDuration, t)}</p>
-            </div>
-          </section>
-        )}
-
-        {routeData && (
           <MapView
-            isLoaded={isLoaded}
-            loadError={loadError}
             startLocation={routeData.startLocation}
             routeStops={routeData.stops}
             endLocation={routeData.endLocation}
-            directions={routeData.directions}
+            routePath={routeData.routePath}
             t={t}
           />
+        )}
+        {!routeData && (
+          <section className="empty-map">
+            <UiIcon name="map" />
+            <p>{t('readyHint')}</p>
+          </section>
         )}
 
         <RouteList
@@ -660,6 +734,20 @@ const App = () => {
           t={t}
         />
       </main>
+
+      {routeData && (
+        <footer className="route-summary-bar">
+          <div>
+            <span>{t('totalDistance')}</span>
+            <strong>{totalDistanceLabel}</strong>
+          </div>
+          <div className="summary-divider"></div>
+          <div>
+            <span>{t('totalTime')}</span>
+            <strong>{totalDurationLabel}</strong>
+          </div>
+        </footer>
+      )}
 
       {isOptimizing && (
         <div className="loading-overlay" aria-live="polite">
