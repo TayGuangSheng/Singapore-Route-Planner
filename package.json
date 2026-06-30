@@ -9,14 +9,21 @@
     "test": "node --test tests/oneMap.test.mjs tests/routeOptimization.test.mjs",
     "check": "npm run test && npm run build",
     "onemap:token": "node ./scripts/refresh-onemap-token.mjs",
+    "native:add:android": "cap add android",
+    "native:sync": "npm run build && cap sync",
+    "native:open:android": "cap open android",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@capacitor-community/admob": "^8.0.0",
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
     "leaflet": "^1.9.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
     "@vitejs/plugin-react": "^4.3.1",
     "vite": "^5.4.0"
   }

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">SG Route Planner</string>
+    <string name="title_activity_main">SG Route Planner</string>
+    <string name="package_name">com.sgrouteplanner.app</string>
+    <string name="custom_url_scheme">com.sgrouteplanner.app</string>
+</resources>

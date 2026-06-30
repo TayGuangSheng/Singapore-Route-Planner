@@ -6,6 +6,7 @@ Mobile-first delivery route planner for Singapore locations (postal codes or add
 
 - Node.js 18+
 - OneMap account for exact drive routing
+- Android Studio / Android SDK for native Android builds and AdMob testing
 
 ## Setup
 
@@ -48,6 +49,30 @@ npm run check
 
 This runs the regression tests and production build.
 
+## Native Android and AdMob
+
+AdMob banner ads run only in native Android/iOS builds, not in the Vercel web app. This project includes a Capacitor Android shell and a bottom banner integration through `@capacitor-community/admob`.
+
+During development, the app uses Google's demo AdMob IDs when no production IDs are provided. Before publishing, replace them with your own AdMob app and banner IDs:
+
+```bash
+ADMOB_ANDROID_APP_ID=ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy
+VITE_ADMOB_ANDROID_BANNER_ID=ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy
+VITE_ADMOB_IOS_BANNER_ID=ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy
+VITE_ADMOB_USE_TEST_ADS=false
+```
+
+Build and sync the Android app:
+
+```bash
+npm run native:sync
+npm run native:open:android
+```
+
+The banner is positioned at the bottom of the native app. When a route summary is visible, the summary bar is lifted above the ad so the banner does not cover route information.
+
+If Gradle cannot find the Android SDK, set `ANDROID_HOME` or create `android/local.properties` with your SDK path, for example `sdk.dir=C\:\\Users\\YOUR_NAME\\AppData\\Local\\Android\\Sdk`.
+
 ## Notes
 
 - Postal codes must be 6 digits (Singapore format), or you can enter full addresses.
@@ -58,3 +83,4 @@ This runs the regression tests and production build.
 - The app limits to 20 stops and enables optimization when you enter a start plus at least 1 stop or an end location.
 - Navigation buttons open Google Maps or Waze directly via deep links.
 - Drivers can save named common locations (for example `Home`, `Work`) and reuse them for Start/End; saved entries persist in browser storage.
+- Web builds do not show AdMob because Google AdMob is a native mobile ads SDK. Use AdSense or another web ad product if you need ads on the hosted browser URL.

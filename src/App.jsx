@@ -8,6 +8,7 @@ import SavedLocations from './components/SavedLocations.jsx';
 import UiIcon from './components/UiIcon.jsx';
 import { translations, getInitialLanguage, LANGUAGE_STORAGE_KEY } from './i18n.js';
 import { geocodeLocation, getDistanceMatrix, getRouteDetails } from './services/oneMap.js';
+import { setupAdMobBanner } from './services/adMob.js';
 import { applyTwoOpt, buildNearestNeighborOrder } from './utils/routeOptimization.js';
 import { formatDistance, formatDuration } from './utils/formatters.js';
 
@@ -100,6 +101,7 @@ const App = () => {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [adMobBannerHeight, setAdMobBannerHeight] = useState(0);
 
   const t = useMemo(() => {
     const dictionary = translations[language] || translations.en;
@@ -109,6 +111,37 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
   }, [language]);
+
+  useEffect(() => {
+    let cleanup = null;
+    let isMounted = true;
+
+    setupAdMobBanner({
+      onHeightChange: (height) => {
+        if (isMounted) {
+          setAdMobBannerHeight(height);
+        }
+      }
+    })
+      .then((banner) => {
+        if (isMounted) {
+          cleanup = banner.remove;
+        } else {
+          banner.remove();
+        }
+      })
+      .catch((error) => {
+        console.warn('AdMob banner setup failed', error);
+        if (isMounted) {
+          setAdMobBannerHeight(0);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      cleanup?.();
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(SAVED_LOCATIONS_STORAGE_KEY, JSON.stringify(savedLocations));
@@ -520,12 +553,21 @@ const App = () => {
   const endStop = routeData?.endLocation
     ? { postal: routeData.endPostal, latLng: routeData.endLocation, address: routeData.endAddress }
     : null;
-  const shellClassName = routeData ? 'app-shell has-route' : 'app-shell';
+  const shellClassName = [
+    'app-shell',
+    routeData ? 'has-route' : '',
+    adMobBannerHeight > 0 ? 'has-admob-banner' : ''
+  ]
+    .filter(Boolean)
+    .join(' ');
   const totalDistanceLabel = routeData ? formatDistance(routeData.totalDistance, t) : '--';
   const totalDurationLabel = routeData ? formatDuration(routeData.totalDuration, t) : '--';
 
   return (
-    <div className={shellClassName}>
+    <div
+      className={shellClassName}
+      style={adMobBannerHeight > 0 ? { '--admob-banner-height': `${adMobBannerHeight}px` } : undefined}
+    >
       <header className="app-header">
         <div className="app-brand">
           <span className="app-mark" aria-hidden="true">

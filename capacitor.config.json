@@ -1,0 +1,8 @@
+{
+  "appId": "com.sgrouteplanner.app",
+  "appName": "SG Route Planner",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
