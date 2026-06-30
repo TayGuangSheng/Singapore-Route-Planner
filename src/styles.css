@@ -43,6 +43,7 @@ Color palette:
   --text-sm: 14px;
   --text-md: 16px;
   --text-lg: 18px;
+  --field-control-size: 48px;
   --radius: 8px;
 }
 
@@ -400,8 +401,8 @@ input:focus-visible {
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  width: 48px;
-  height: 48px;
+  width: var(--field-control-size);
+  height: var(--field-control-size);
   padding: 0;
   color: var(--blue-dark);
   background: var(--blue-soft);
@@ -484,7 +485,7 @@ input:focus-visible {
 
 .stop-input {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) 42px;
+  grid-template-columns: 76px minmax(0, 1fr) var(--field-control-size);
   align-items: center;
   gap: 8px;
 }
@@ -502,8 +503,8 @@ input:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 48px;
+  width: var(--field-control-size);
+  height: var(--field-control-size);
   padding: 0;
   color: var(--muted);
   background: #ffffff;
@@ -1204,7 +1205,7 @@ input:focus-visible {
   }
 
   .stop-input {
-    grid-template-columns: 68px minmax(0, 1fr) 40px;
+    grid-template-columns: 68px minmax(0, 1fr) var(--field-control-size);
     gap: 6px;
   }
 
