@@ -72,6 +72,15 @@ const icons = {
     <path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20V6.5zm6-.8v11.8m6-10.9v11.8" />
   ),
   plus: <path d="M12 5v14M5 12h14" />,
+  paste: (
+    <>
+      <path d="M9 4.5h6" />
+      <path d="M10 3h4a2 2 0 0 1 2 2v1H8V5a2 2 0 0 1 2-2z" />
+      <path d="M7 5.5H6a2 2 0 0 0-2 2V19a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5a2 2 0 0 0-2-2h-1" />
+      <path d="M8 12h8" />
+      <path d="M8 16h6" />
+    </>
+  ),
   close: (
     <>
       <path d="M5 5l14 14" />

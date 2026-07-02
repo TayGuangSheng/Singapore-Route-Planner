@@ -302,6 +302,24 @@ const App = () => {
     setRouteData(null);
   };
 
+  const handleImportStops = (values, mode = 'replace') => {
+    const normalizedValues = values.map((value) => normalizeLocationInput(value)).filter(Boolean);
+
+    setStops((prev) => {
+      const existingStops = mode === 'append' ? getFilledStops(prev) : [];
+      const availableSlots = Math.max(MAX_STOPS - existingStops.length, 0);
+      const importedStops = normalizedValues.slice(0, availableSlots).map((postal) => ({
+        id: createStopId(),
+        postal
+      }));
+      const nextStops = [...existingStops, ...importedStops];
+
+      return nextStops.length ? nextStops : [{ id: createStopId(), postal: '' }];
+    });
+    setErrors([]);
+    setRouteData(null);
+  };
+
   const handleRemoveStop = (id) => {
     setStops((prev) => {
       if (prev.length === 1) {
@@ -571,7 +589,7 @@ const App = () => {
       <header className="app-header">
         <div className="app-brand">
           <span className="app-mark" aria-hidden="true">
-            <img src="/icon.svg" alt="" className="app-logo" />
+            <img src="/icon.png" alt="" className="app-logo" />
           </span>
           <div className="app-title-block">
             <h1>{t('appTitle')}</h1>
@@ -695,6 +713,7 @@ const App = () => {
             onStopChange={handleStopChange}
             onAddStop={handleAddStop}
             onRemoveStop={handleRemoveStop}
+            onImportStops={handleImportStops}
             maxStops={MAX_STOPS}
             t={t}
           />
